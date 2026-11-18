@@ -1,10 +1,29 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BarChart3, Building2, Ban, Boxes, CheckCircle2, ClipboardList, Crown, Trash2, Download, LogOut, MessageCircle, MapPin, PackagePlus, Pencil, Play, Printer, ReceiptText, Save, ShieldCheck, ShoppingCart, Truck, Tags, UserPlus, Users, WalletCards } from "lucide-react";
+import { BarChart3, Building2, Ban, Boxes, CheckCircle2, ClipboardList, Crown, Trash2, Download, LogOut, MessageCircle, MapPin, PackagePlus, Palette, Pencil, Play, Printer, ReceiptText, RotateCcw, Save, Settings2, ShieldCheck, ShoppingCart, Truck, Tags, UserPlus, Users, WalletCards } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import "./styles.css";
 
 const API = import.meta.env.VITE_API_URL || "https://carvao-sales-system-production.up.railway.app/api";
+const BRAND_STORAGE_KEY = "carvao-brand-v1";
+const DEFAULT_BRAND = { name: "Carvao Pro", subtitle: "vendas e estoque", logoUrl: "", navigationColor: "#18231c", accentColor: "#ffbf47", backgroundColor: "#f4f6f1" };
+const isHexColor = (value) => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+const normalizeBrand = (brand = {}) => ({
+  name: typeof brand.name === "string" && brand.name.trim() ? brand.name.slice(0, 40) : DEFAULT_BRAND.name,
+  subtitle: typeof brand.subtitle === "string" && brand.subtitle.trim() ? brand.subtitle.slice(0, 60) : DEFAULT_BRAND.subtitle,
+  logoUrl: typeof brand.logoUrl === "string" ? brand.logoUrl : "",
+  navigationColor: isHexColor(brand.navigationColor) ? brand.navigationColor : DEFAULT_BRAND.navigationColor,
+  accentColor: isHexColor(brand.accentColor) ? brand.accentColor : DEFAULT_BRAND.accentColor,
+  backgroundColor: isHexColor(brand.backgroundColor) ? brand.backgroundColor : DEFAULT_BRAND.backgroundColor,
+});
+const readBrand = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(BRAND_STORAGE_KEY) || "null");
+    return normalizeBrand(saved);
+  } catch {
+    return DEFAULT_BRAND;
+  }
+};
 const money = (v) =>
   Number(v || 0).toLocaleString("pt-BR", {
     style: "currency",
@@ -30,6 +49,15 @@ function App() {
   const [user, setUser] = useState(null);
   const [sessionChecked, setSessionChecked] = useState(false);
   const [tab, setTab] = useState("dashboard");
+  const [brand, setBrand] = useState(readBrand);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--brand-navigation", brand.navigationColor);
+    root.style.setProperty("--brand-accent", brand.accentColor);
+    root.style.setProperty("--brand-background", brand.backgroundColor);
+    localStorage.setItem(BRAND_STORAGE_KEY, JSON.stringify(brand));
+  }, [brand]);
 
   useEffect(() => {
     if (window.location.pathname === "/dono" && user?.role === "admin") setTab("owner");
@@ -67,7 +95,7 @@ function App() {
   }
 
   if (!sessionChecked) return <Loading />;
-  if (!user) return <Login onLogin={onLogin} />;
+  if (!user) return <Login onLogin={onLogin} brand={brand} />;
 
   const can = (permission) => (user.permissions || []).includes(permission);
   const tabs = [
@@ -83,6 +111,7 @@ function App() {
     ["sellers", "Vendedores", Users, "users.view"],
     ["access", "Perfis e Permissoes", ShieldCheck, "users.change_permissions"],
     ["whatsapp", "Alertas", MessageCircle, "settings.alerts"],
+    ...(user.role === "admin" ? [["appearance", "Configuracoes", Settings2, null]] : []),
   ].filter((item) => item[3] === null || (Array.isArray(item[3]) ? item[3].some(can) : can(item[3])));
 
   function selectTab(id) {
@@ -94,10 +123,10 @@ function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <span className="mark">C</span>
+          {brand.logoUrl ? <img className="brand-logo" src={brand.logoUrl} alt={`Logo ${brand.name}`} /> : <span className="mark">{brand.name.charAt(0).toUpperCase()}</span>}
           <div>
-            <strong>Carvao Pro</strong>
-            <small>vendas e estoque</small>
+            <strong>{brand.name}</strong>
+            <small>{brand.subtitle}</small>
           </div>
         </div>
         <nav>
@@ -119,6 +148,7 @@ function App() {
               {user.name} · {(user.profiles || [user.role]).join(", ")}
             </p>
           </div>
+          <button className="mobile-logout" onClick={logout} aria-label="Sair da conta"><LogOut size={18} /> Sair</button>
         </header>
         {tab === "dashboard" && <Dashboard api={api} user={user} />}
         {tab === "owner" && user.role === "admin" && <OwnerDashboard api={api} />}
@@ -132,12 +162,13 @@ function App() {
         {tab === "access" && <><NewAccessUser api={api} /><AccessControl api={api} /></>}
         {tab === "sellers" && <Sellers api={api} user={user} />}
         {tab === "whatsapp" && <WhatsApp api={api} />}
+        {tab === "appearance" && user.role === "admin" && <BrandSettings brand={brand} onChange={setBrand} />}
       </main>
     </div>
   );
 }
 
-function Login({ onLogin }) {
+function Login({ onLogin, brand }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -157,8 +188,8 @@ function Login({ onLogin }) {
   return (
     <section className="login">
       <form onSubmit={submit} className="panel login-card">
-        <span className="mark large">C</span>
-        <h1>Carvao Pro</h1>
+        {brand.logoUrl ? <img className="brand-logo brand-logo-large" src={brand.logoUrl} alt={`Logo ${brand.name}`} /> : <span className="mark large">{brand.name.charAt(0).toUpperCase()}</span>}
+        <h1>{brand.name}</h1>
         <label>
           E-mail
           <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required />
@@ -1633,6 +1664,47 @@ function WhatsApp({ api }) {
       </button>
       {testStatus && <p className="form-status">{testStatus}</p>}
     </form>
+  );
+}
+
+function BrandSettings({ brand, onChange }) {
+  const [draft, setDraft] = useState(brand);
+  const [saved, setSaved] = useState("");
+
+  useEffect(() => setDraft(brand), [brand]);
+
+  function update(field, value) {
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function save(e) {
+    e.preventDefault();
+    onChange(normalizeBrand(draft));
+    setSaved("Configuracoes visuais salvas neste navegador.");
+  }
+
+  function reset() {
+    onChange(DEFAULT_BRAND);
+    setSaved("Identidade restaurada para o padrao.");
+  }
+
+  return (
+    <section className="brand-settings">
+      <div className="panel brand-settings-intro"><Palette size={24} aria-hidden="true" /><div><h2>Identidade visual</h2><p>Personalize nome, logo e paleta sem alterar vendas ou estoque.</p></div></div>
+      <form className="panel form brand-settings-form" onSubmit={save}>
+        <h2>Marca</h2>
+        <label className="field"><span>Nome exibido</span><input value={draft.name} onChange={(e) => update("name", e.target.value)} maxLength="40" /></label>
+        <label className="field"><span>Descricao curta</span><input value={draft.subtitle} onChange={(e) => update("subtitle", e.target.value)} maxLength="60" /></label>
+        <label className="field"><span>URL da logo</span><input type="url" value={draft.logoUrl} onChange={(e) => update("logoUrl", e.target.value)} placeholder="https://exemplo.com/logo.png" /></label>
+        <div className="brand-colors">
+          <label className="field"><span>Menu</span><input type="color" value={draft.navigationColor} onChange={(e) => update("navigationColor", e.target.value)} /></label>
+          <label className="field"><span>Acao principal</span><input type="color" value={draft.accentColor} onChange={(e) => update("accentColor", e.target.value)} /></label>
+          <label className="field"><span>Fundo</span><input type="color" value={draft.backgroundColor} onChange={(e) => update("backgroundColor", e.target.value)} /></label>
+        </div>
+        <div className="brand-actions"><button className="primary"><Save size={16} /> Salvar marca</button><button type="button" onClick={reset}><RotateCcw size={16} /> Restaurar padrao</button></div>
+        {saved && <p className="form-status">{saved}</p>}
+      </form>
+    </section>
   );
 }
 
