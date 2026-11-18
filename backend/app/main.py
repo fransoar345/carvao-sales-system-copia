@@ -1,7 +1,10 @@
 import asyncio
+from collections import defaultdict, deque
 from contextvars import ContextVar
 from datetime import date, datetime, time, timedelta
 from io import BytesIO
+from threading import Lock
+from time import monotonic
 from xml.sax.saxutils import escape
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
@@ -43,6 +46,40 @@ app.add_middleware(
 
 daily_summary_sent: set[date] = set()
 request_ip: ContextVar[str | None] = ContextVar("request_ip", default=None)
+LOGIN_ATTEMPT_LIMIT = 5
+LOGIN_ATTEMPT_WINDOW_SECONDS = 15 * 60
+login_attempts: dict[str, deque[float]] = defaultdict(deque)
+login_attempts_lock = Lock()
+
+
+def login_attempt_keys(request: Request, email: str) -> tuple[str, str]:
+    client_ip = request.client.host if request.client else "unknown"
+    return f"ip:{client_ip}", f"email:{email}"
+
+
+def login_is_rate_limited(keys: tuple[str, str]) -> bool:
+    now = monotonic()
+    with login_attempts_lock:
+        for key in keys:
+            attempts = login_attempts[key]
+            while attempts and now - attempts[0] >= LOGIN_ATTEMPT_WINDOW_SECONDS:
+                attempts.popleft()
+            if len(attempts) >= LOGIN_ATTEMPT_LIMIT:
+                return True
+    return False
+
+
+def record_failed_login(keys: tuple[str, str]) -> None:
+    now = monotonic()
+    with login_attempts_lock:
+        for key in keys:
+            login_attempts[key].append(now)
+
+
+def clear_login_attempts(keys: tuple[str, str]) -> None:
+    with login_attempts_lock:
+        for key in keys:
+            login_attempts.pop(key, None)
 
 
 @app.middleware("http")
@@ -358,13 +395,19 @@ def health():
 
 
 @app.post("/api/auth/login")
-def login(response: Response, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, response: Response, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     username = form.username.strip().lower()
+    attempt_keys = login_attempt_keys(request, username)
+    if login_is_rate_limited(attempt_keys):
+        raise HTTPException(429, "Muitas tentativas. Tente novamente mais tarde.")
     if not username or not form.password.strip():
-        raise HTTPException(400, "Informe o e-mail e a senha")
+        record_failed_login(attempt_keys)
+        raise HTTPException(401, "Credenciais invalidas")
     user = db.query(models.User).options(joinedload(models.User.access_roles).joinedload(models.AccessRole.permissions), joinedload(models.User.permission_overrides).joinedload(models.UserPermissionOverride.permission)).filter(models.User.email == username).first()
     if not user or not verify_password(form.password, user.password_hash):
-        raise HTTPException(401, "Login ou senha invalidos")
+        record_failed_login(attempt_keys)
+        raise HTTPException(401, "Credenciais invalidas")
+    clear_login_attempts(attempt_keys)
     token = create_access_token(user)
     response.set_cookie(
         "access_token",
