@@ -8,10 +8,11 @@ const API = import.meta.env.VITE_API_URL || "https://carvao-sales-system-product
 const BRAND_STORAGE_KEY = "carvao-brand-v1";
 const DEFAULT_BRAND = { name: "Carvao Pro", subtitle: "vendas e estoque", logoUrl: "", navigationColor: "#18231c", accentColor: "#ffbf47", backgroundColor: "#f4f6f1" };
 const isHexColor = (value) => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
+const isAllowedLogoUrl = (value) => typeof value === "string" && value.length <= 1_400_000 && (/^https?:\/\/\S+$/i.test(value) || /^data:image\/(png|jpeg|webp);base64,/i.test(value));
 const normalizeBrand = (brand = {}) => ({
   name: typeof brand.name === "string" && brand.name.trim() ? brand.name.slice(0, 40) : DEFAULT_BRAND.name,
   subtitle: typeof brand.subtitle === "string" && brand.subtitle.trim() ? brand.subtitle.slice(0, 60) : DEFAULT_BRAND.subtitle,
-  logoUrl: typeof brand.logoUrl === "string" ? brand.logoUrl : "",
+  logoUrl: isAllowedLogoUrl(brand.logoUrl) ? brand.logoUrl : "",
   navigationColor: isHexColor(brand.navigationColor) ? brand.navigationColor : DEFAULT_BRAND.navigationColor,
   accentColor: isHexColor(brand.accentColor) ? brand.accentColor : DEFAULT_BRAND.accentColor,
   backgroundColor: isHexColor(brand.backgroundColor) ? brand.backgroundColor : DEFAULT_BRAND.backgroundColor,
@@ -1677,6 +1678,23 @@ function BrandSettings({ brand, onChange }) {
     setDraft((current) => ({ ...current, [field]: value }));
   }
 
+  function attachLogo(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!new Set(["image/png", "image/jpeg", "image/webp"]).has(file.type) || file.size > 1024 * 1024) {
+      setSaved("Use uma imagem PNG, JPG ou WebP de ate 1 MB.");
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      update("logoUrl", String(reader.result));
+      setSaved("Imagem pronta. Clique em Salvar marca para aplicar.");
+    };
+    reader.onerror = () => setSaved("Nao foi possivel ler a imagem selecionada.");
+    reader.readAsDataURL(file);
+  }
+
   function save(e) {
     e.preventDefault();
     onChange(normalizeBrand(draft));
@@ -1696,6 +1714,8 @@ function BrandSettings({ brand, onChange }) {
         <label className="field"><span>Nome exibido</span><input value={draft.name} onChange={(e) => update("name", e.target.value)} maxLength="40" /></label>
         <label className="field"><span>Descricao curta</span><input value={draft.subtitle} onChange={(e) => update("subtitle", e.target.value)} maxLength="60" /></label>
         <label className="field"><span>URL da logo</span><input type="url" value={draft.logoUrl} onChange={(e) => update("logoUrl", e.target.value)} placeholder="https://exemplo.com/logo.png" /></label>
+        <label className="field logo-upload"><span>Ou anexar imagem</span><input type="file" accept="image/png,image/jpeg,image/webp" onChange={attachLogo} /><small>PNG, JPG ou WebP, ate 1 MB.</small></label>
+        {draft.logoUrl && <img className="brand-logo-preview" src={draft.logoUrl} alt="Previa da logo" />}
         <div className="brand-colors">
           <label className="field"><span>Menu</span><input type="color" value={draft.navigationColor} onChange={(e) => update("navigationColor", e.target.value)} /></label>
           <label className="field"><span>Acao principal</span><input type="color" value={draft.accentColor} onChange={(e) => update("accentColor", e.target.value)} /></label>

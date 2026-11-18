@@ -171,7 +171,10 @@ textarea { min-height: 88px; padding-top: 12px; resize: vertical; }
 .brand-settings-intro h2 { margin-bottom: 4px; }
 .brand-settings-intro p { color: #5c430f; }
 .brand-settings-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.brand-settings-form h2, .brand-settings-form > .field:nth-of-type(3), .brand-settings-form .brand-colors, .brand-settings-form .brand-actions, .brand-settings-form .form-status { grid-column: 1 / -1; }
+.brand-settings-form h2, .brand-settings-form > .field:nth-of-type(3), .brand-settings-form .logo-upload, .brand-settings-form .brand-logo-preview, .brand-settings-form .brand-colors, .brand-settings-form .brand-actions, .brand-settings-form .form-status { grid-column: 1 / -1; }
+.logo-upload input[type="file"] { padding: 8px; }
+.logo-upload small { color: #66756b; font-weight: 400; }
+.brand-logo-preview { width: 96px; height: 96px; object-fit: contain; border: 1px solid #dfe6dd; border-radius: 8px; padding: 8px; background: #fff; }
 .brand-colors { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
 .brand-colors input[type="color"] { padding: 4px; }
 .brand-actions { display: flex; gap: 10px; flex-wrap: wrap; }
