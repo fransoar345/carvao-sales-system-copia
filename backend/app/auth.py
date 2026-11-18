@@ -13,12 +13,14 @@ from sqlalchemy.orm import Session, joinedload
 from .config import get_settings
 from .database import get_db
 from . import models
+from .passwords import validate_password_strength
 
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
 def hash_password(password: str, salt: bytes | None = None) -> str:
+    validate_password_strength(password)
     salt = salt or os.urandom(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 240_000)
     return f"pbkdf2_sha256${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"

@@ -2,6 +2,8 @@ from datetime import date, datetime, time
 import re
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from .passwords import validate_password_strength
+
 
 class Token(BaseModel):
     access_token: str
@@ -156,7 +158,12 @@ class SellerCreate(BaseModel):
     monthly_goal: float | None = None
     commission_percent: float | None = None
     email: str
-    temporary_password: str = Field(min_length=6)
+    temporary_password: str = Field(min_length=10)
+
+    @field_validator("temporary_password")
+    @classmethod
+    def validate_temporary_password(cls, value: str) -> str:
+        return validate_password_strength(value)
 
 
 class SellerUpdate(BaseModel):
@@ -166,7 +173,12 @@ class SellerUpdate(BaseModel):
     commission_percent: float | None = None
     active: bool | None = None
     email: str | None = None
-    new_password: str | None = Field(default=None, min_length=6)
+    new_password: str | None = Field(default=None, min_length=10)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_new_password(cls, value: str | None) -> str | None:
+        return validate_password_strength(value) if value is not None else value
 
 
 class SellerOut(BaseModel):
@@ -395,8 +407,13 @@ class UserAccessUpdate(BaseModel):
 class AccessUserCreate(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     email: str
-    password: str = Field(min_length=6)
+    password: str = Field(min_length=10)
     role_ids: list[int] = Field(min_length=1)
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return validate_password_strength(value)
 
 
 class PayableCreate(BaseModel):
