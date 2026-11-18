@@ -1,3 +1,5 @@
+name: carvao-sales-system-copia
+
 services:
   db:
     image: postgres:16-alpine
@@ -8,30 +10,30 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   backend:
     build: ./backend
     environment:
       DATABASE_URL: postgresql+psycopg://carvao:carvao@db:5432/carvao
       JWT_SECRET: troque-este-segredo
-      CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+      CORS_ORIGINS: http://localhost:5173,http://localhost:8081
       WHATSAPP_PROVIDER: mock
       MANAGER_WHATSAPP: +5563999999999
     depends_on:
       - db
     ports:
-      - "8000:8000"
+      - "8001:8000"
 
   frontend:
     build:
       context: ./frontend
       args:
-        VITE_API_URL: http://localhost:8000/api
+        VITE_API_URL: http://localhost:8001/api
     depends_on:
       - backend
     ports:
-      - "8080:80"
+      - "8081:80"
 
 volumes:
   postgres_data:
