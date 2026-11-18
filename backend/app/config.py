@@ -4,6 +4,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     app_name: str = "Sistema Carvao"
+    environment: str = "development"
     database_url: str = "sqlite:///./carvao.db"
     jwt_secret: str = ""
     jwt_algorithm: str = "HS256"

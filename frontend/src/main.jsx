@@ -27,8 +27,8 @@ const allowed = (user, permission) => {
 };
 
 function App() {
-  const [token, setToken] = useState(localStorage.getItem("token"));
-  const [user, setUser] = useState(JSON.parse(localStorage.getItem("user") || "null"));
+  const [user, setUser] = useState(null);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const [tab, setTab] = useState("dashboard");
 
   useEffect(() => {
@@ -40,9 +40,9 @@ function App() {
       async call(path, options = {}) {
         const res = await fetch(`${API}${path}`, {
           ...options,
+          credentials: "include",
           headers: {
             "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
             ...(options.headers || {}),
           },
         });
@@ -50,27 +50,24 @@ function App() {
         return res.json();
       },
     }),
-    [token],
+    [],
   );
 
   useEffect(() => {
-    if (token) api.call("/auth/me").then((current) => { setUser(current); localStorage.setItem("user", JSON.stringify(current)); }).catch(() => logout());
-  }, [token, api]);
+    api.call("/auth/me").then(setUser).catch(() => setUser(null)).finally(() => setSessionChecked(true));
+  }, [api]);
 
   function onLogin(data) {
-    setToken(data.access_token);
     setUser(data.user);
-    localStorage.setItem("token", data.access_token);
-    localStorage.setItem("user", JSON.stringify(data.user));
   }
 
   function logout() {
-    localStorage.clear();
-    setToken(null);
+    api.call("/auth/logout", { method: "POST" }).catch(() => {});
     setUser(null);
   }
 
-  if (!token) return <Login onLogin={onLogin} />;
+  if (!sessionChecked) return <Loading />;
+  if (!user) return <Login onLogin={onLogin} />;
 
   const can = (permission) => (user.permissions || []).includes(permission);
   const tabs = [
@@ -123,14 +120,14 @@ function App() {
             </p>
           </div>
         </header>
-        {tab === "dashboard" && <Dashboard api={api} token={token} user={user} />}
+        {tab === "dashboard" && <Dashboard api={api} user={user} />}
         {tab === "owner" && user.role === "admin" && <OwnerDashboard api={api} />}
         {tab === "sale" && <Sales api={api} user={user} />}
         {tab === "customers" && <Customers api={api} user={user} />}
         {tab === "prices" && <PriceTables api={api} />}
         {tab === "products" && <Products api={api} user={user} />}
         {tab === "stock" && <Stock api={api} user={user} />}
-        {tab === "deliveries" && <Deliveries api={api} token={token} />}
+        {tab === "deliveries" && <Deliveries api={api} />}
         {tab === "finance" && <Finance api={api} user={user} />}
         {tab === "access" && <><NewAccessUser api={api} /><AccessControl api={api} /></>}
         {tab === "sellers" && <Sellers api={api} user={user} />}
@@ -153,7 +150,7 @@ function Login({ onLogin }) {
       return;
     }
     const body = new URLSearchParams({ username: normalizedEmail, password });
-    const res = await fetch(`${API}/auth/login`, { method: "POST", body });
+    const res = await fetch(`${API}/auth/login`, { method: "POST", body, credentials: "include" });
     if (!res.ok) return setError("Credenciais invalidas");
     onLogin(await res.json());
   }
@@ -190,7 +187,7 @@ function useLoad(api, loader, deps = []) {
   return { data, setData, error, reload };
 }
 
-function Dashboard({ api, token }) {
+function Dashboard({ api }) {
   const today = new Date().toISOString().slice(0, 10);
   const [filters, setFilters] = useState({
     start: today,
@@ -204,7 +201,7 @@ function Dashboard({ api, token }) {
   const packs = data.stock.filter((p) => p.type === "embalagem_vazia");
   const exportFile = async (kind) => {
     const res = await fetch(`${API}/reports/export.${kind}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
     });
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -1174,7 +1171,7 @@ const deliveryStatus = {
   nao_entregue: "Nao entregue",
 };
 
-function Deliveries({ api, token }) {
+function Deliveries({ api }) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     delivery_date: today,
@@ -1270,7 +1267,7 @@ function Deliveries({ api, token }) {
     setMessage("");
     const printWindow = window.open("", "_blank");
     try {
-      const response = await fetch(`${API}/delivery-manifests/${manifest.id}/pdf`, { headers: { Authorization: `Bearer ${token}` } });
+      const response = await fetch(`${API}/delivery-manifests/${manifest.id}/pdf`, { credentials: "include" });
       if (!response.ok) throw new Error((await response.json()).detail || "Nao foi possivel gerar o PDF");
       const url = URL.createObjectURL(await response.blob());
       if (printWindow) printWindow.location.href = url;

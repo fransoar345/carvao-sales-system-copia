@@ -29,6 +29,8 @@ from .whatsapp import get_whatsapp_settings, notify_delivery_status, notify_low_
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
+cookie_secure = settings.environment.lower() == "production"
+cookie_samesite = "none" if cookie_secure else "lax"
 
 app.add_middleware(
     CORSMiddleware,
@@ -354,8 +356,8 @@ def health():
     return {"ok": True, "app": settings.app_name}
 
 
-@app.post("/api/auth/login", response_model=schemas.Token)
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@app.post("/api/auth/login")
+def login(response: Response, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     username = form.username.strip().lower()
     if not username or not form.password.strip():
         raise HTTPException(400, "Informe o e-mail e a senha")
@@ -363,7 +365,21 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
     if not user or not verify_password(form.password, user.password_hash):
         raise HTTPException(401, "Login ou senha invalidos")
     token = create_access_token(user)
-    return {"access_token": token, "user": user_to_schema(user).model_dump()}
+    response.set_cookie(
+        "access_token",
+        token,
+        httponly=True,
+        secure=cookie_secure,
+        samesite=cookie_samesite,
+        max_age=settings.access_token_expire_minutes * 60,
+        path="/",
+    )
+    return {"user": user_to_schema(user).model_dump()}
+
+
+@app.post("/api/auth/logout", status_code=204)
+def logout(response: Response):
+    response.delete_cookie("access_token", path="/", httponly=True, secure=cookie_secure, samesite=cookie_samesite)
 
 
 @app.get("/api/auth/me", response_model=schemas.UserOut)
