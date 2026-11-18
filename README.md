@@ -31,6 +31,20 @@ SEED_DEMO=true
 DEMO_USER_PASSWORD=senha-apenas-para-desenvolvimento
 ```
 
+## Segredo JWT
+
+`JWT_SECRET` e obrigatoria em todos os ambientes. Gere um valor aleatorio forte e armazene-o somente no gerenciador de variaveis do ambiente:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Depois, configure o resultado sem publica-lo no repositorio:
+
+```env
+JWT_SECRET=valor-gerado-fora-do-repositorio
+```
+
 ## Rodar localmente
 
 Backend:

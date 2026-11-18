@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     app_name: str = "Sistema Carvao"
     database_url: str = "sqlite:///./carvao.db"
-    jwt_secret: str = "change-me-in-production"
+    jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 720
     whatsapp_provider: str = "mock"
@@ -20,4 +20,7 @@ class Settings(BaseSettings):
 
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    if not settings.jwt_secret:
+        raise RuntimeError("JWT_SECRET e obrigatoria. Gere um segredo forte antes de iniciar a aplicacao.")
+    return settings
