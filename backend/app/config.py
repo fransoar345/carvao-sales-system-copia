@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     whatsapp_api_url: str = ""
     whatsapp_token: str = ""
     manager_whatsapp: str = "+5599999999999"
-    cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    cors_origins: str = ""
 
     class Config:
         env_file = ".env"
@@ -24,4 +24,11 @@ def get_settings() -> Settings:
     settings = Settings()
     if not settings.jwt_secret:
         raise RuntimeError("JWT_SECRET e obrigatoria. Gere um segredo forte antes de iniciar a aplicacao.")
+    origins = [origin.strip() for origin in settings.cors_origins.split(",") if origin.strip()]
+    if not origins:
+        raise RuntimeError("CORS_ORIGINS e obrigatoria. Informe a origem exata do frontend.")
+    if "*" in origins:
+        raise RuntimeError("CORS_ORIGINS nao pode usar '*'. Informe origens explicitas.")
+    if settings.environment.lower() == "production" and len(origins) != 1:
+        raise RuntimeError("Em producao, CORS_ORIGINS deve conter somente o dominio do frontend.")
     return settings

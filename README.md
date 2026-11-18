@@ -45,6 +45,22 @@ Depois, configure o resultado sem publica-lo no repositorio:
 JWT_SECRET=valor-gerado-fora-do-repositorio
 ```
 
+## CORS e sessao entre Vercel e Railway
+
+Como o frontend e a API estao em dominios diferentes, configure as duas variaveis no Railway. Em producao, `CORS_ORIGINS` deve conter **apenas** o dominio exato publicado na Vercel, sem barra final, sem `*` e sem lista de dominios.
+
+```env
+ENVIRONMENT=production
+CORS_ORIGINS=https://seu-projeto.vercel.app
+```
+
+No desenvolvimento local, informe explicitamente a origem usada pelo Vite:
+
+```env
+ENVIRONMENT=development
+CORS_ORIGINS=http://localhost:5173
+```
+
 ## Rodar localmente
 
 Backend:
