@@ -12,14 +12,24 @@ Aplicacao online com backend FastAPI, frontend React/Vite e suporte a PostgreSQL
 - Dashboard com estoque atual, total vendido, ranking, comissao e filtros.
 - Exportacao de vendas em Excel e PDF.
 - Configuracao de alertas com modo `mock`, Telegram Bot e estrutura para Meta, Z-API ou Twilio.
-- Seed automatico para testar imediatamente.
+- O sistema cria somente o primeiro administrador quando o banco ainda nao possui usuarios.
 
-## Credenciais de teste
+## Primeiro administrador e dados de demonstracao
 
-- Admin: `admin@carvao.local` / `admin123`
-- Gerente: `gerente@carvao.local` / `gerente123`
-- Vendedor: `ana@carvao.local` / `vendedor123`
-- Vendedor: `lucas@carvao.local` / `vendedor123`
+Defina uma senha forte antes da primeira inicializacao. O sistema recusa iniciar sem essa variavel quando nao ha usuarios cadastrados:
+
+```env
+ADMIN_INITIAL_PASSWORD=gere-uma-senha-unica-e-longa
+ADMIN_INITIAL_EMAIL=admin@suaempresa.com
+ADMIN_INITIAL_NAME=Administrador
+```
+
+Dados de demonstracao permanecem desligados por padrao. Para um ambiente local descartavel, habilite-os explicitamente e informe outra senha:
+
+```env
+SEED_DEMO=true
+DEMO_USER_PASSWORD=senha-apenas-para-desenvolvimento
+```
 
 ## Rodar localmente
 
