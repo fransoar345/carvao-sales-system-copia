@@ -21,6 +21,7 @@ nav { display: grid; gap: 8px; }
 nav button, .logout { min-height: 44px; border-radius: 8px; display: flex; align-items: center; gap: 10px; padding: 0 12px; color: #ecf4ee; background: transparent; }
 nav button.active, nav button:hover, .logout:hover { background: color-mix(in srgb, var(--brand-navigation), white 12%); }
 .logout { margin-top: auto; width: 100%; }
+.mobile-topbar, .mobile-drawer, .mobile-menu-overlay { display: none; }
 .mobile-logout { display: none; min-height: 44px; align-items: center; gap: 8px; padding: 0 12px; border-radius: 8px; background: #e6ece5; color: #1f2a23; font-weight: 800; }
 main { padding: 24px; overflow: auto; }
 header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -179,16 +180,29 @@ textarea { min-height: 88px; padding-top: 12px; resize: vertical; }
 .brand-colors input[type="color"] { padding: 4px; }
 .brand-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .brand-actions button:not(.primary) { min-height: 46px; padding: 0 14px; display: inline-flex; align-items: center; gap: 8px; border-radius: 8px; background: #e6ece5; color: #1f2a23; font-weight: 800; }
-@media (max-width: 860px) {
-  .app { grid-template-columns: 1fr; }
-  .sidebar { position: sticky; top: 0; z-index: 2; padding: 12px; }
-  .brand { display: none; }
-  nav { grid-template-columns: repeat(3, 1fr); }
-  nav button { justify-content: center; padding: 0; }
-  nav span { display: none; }
-  .logout { display: none; }
-  .mobile-logout { display: inline-flex; }
-  main { padding: 16px; }
+@media (max-width: 767px) {
+  .app { display: block; }
+  .sidebar { display: none; }
+  .mobile-topbar { position: fixed; inset: 0 0 auto; z-index: 20; min-height: 68px; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #fff; background: var(--brand-navigation); box-shadow: 0 2px 12px rgba(0, 0, 0, .22); }
+  .mobile-topbar-copy { display: grid; gap: 2px; min-width: 0; }
+  .mobile-topbar-copy strong, .mobile-topbar-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-topbar-copy span { color: #b5c7ba; font-size: 13px; }
+  .mobile-menu-trigger, .mobile-drawer-header button { width: 48px; min-width: 48px; height: 48px; display: grid; place-items: center; border-radius: 8px; color: #fff; background: color-mix(in srgb, var(--brand-navigation), white 12%); }
+  .mobile-menu-overlay { display: block; position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .58); }
+  .mobile-drawer { position: fixed; inset: 0 auto 0 0; z-index: 31; width: min(80vw, 320px); padding: 16px; display: flex; flex-direction: column; gap: 18px; color: #fff; background: var(--brand-navigation, #18231c); box-shadow: 10px 0 28px rgba(0, 0, 0, .28); animation: drawer-in 200ms ease-out; }
+  .mobile-drawer-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .mobile-drawer-header > div { display: grid; gap: 3px; min-width: 0; }
+  .mobile-drawer-header strong, .mobile-drawer-header small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-drawer-header small { color: #b5c7ba; }
+  .mobile-drawer-nav { display: grid; gap: 4px; overflow-y: auto; }
+  .mobile-drawer-nav button, .mobile-drawer-logout { position: relative; width: 100%; min-height: 48px; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-radius: 8px; color: #ecf4ee; background: transparent; text-align: left; }
+  .mobile-drawer-nav button.active { color: #fff; background: color-mix(in srgb, var(--brand-navigation), white 12%); }
+  .mobile-drawer-nav button.active::before { content: ""; position: absolute; inset: 8px auto 8px 0; width: 4px; border-radius: 0 4px 4px 0; background: var(--brand-accent, #ffbf47); }
+  .mobile-drawer-logout { margin-top: auto; color: #fff; background: color-mix(in srgb, var(--brand-navigation), white 12%); }
+  .mobile-menu-trigger:focus-visible, .mobile-drawer button:focus-visible { outline: 3px solid var(--brand-accent, #ffbf47); outline-offset: 2px; }
+  .mobile-logout { display: none; }
+  main { padding: 84px 16px 16px; }
+  header p { display: none; }
   .grid, .crud { grid-template-columns: 1fr; }
   .delivery-create { grid-template-columns: 1fr; }
   .delivery-item { grid-template-columns: 30px minmax(0, 1fr); }
@@ -212,3 +226,5 @@ textarea { min-height: 88px; padding-top: 12px; resize: vertical; }
   .brand-settings-form, .brand-colors { grid-template-columns: 1fr; }
   .customer-fields.compact .field:nth-child(4), .customer-fields.compact .field:nth-child(5) { grid-column: auto; }
 }
+@keyframes drawer-in { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+@media (prefers-reduced-motion: reduce) { .mobile-drawer { animation: none; } }

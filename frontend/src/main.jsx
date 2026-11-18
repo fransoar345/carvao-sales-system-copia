@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BarChart3, Building2, Ban, Boxes, CheckCircle2, ClipboardList, Crown, Trash2, Download, LogOut, MessageCircle, MapPin, PackagePlus, Palette, Pencil, Play, Printer, ReceiptText, RotateCcw, Save, Settings2, ShieldCheck, ShoppingCart, Truck, Tags, UserPlus, Users, WalletCards } from "lucide-react";
+import { BarChart3, Building2, Ban, Boxes, CheckCircle2, ClipboardList, Crown, Trash2, Download, LogOut, Menu, MessageCircle, MapPin, PackagePlus, Palette, Pencil, Play, Printer, ReceiptText, RotateCcw, Save, Settings2, ShieldCheck, ShoppingCart, Truck, X, Tags, UserPlus, Users, WalletCards } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import "./styles.css";
 
@@ -51,6 +51,9 @@ function App() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [tab, setTab] = useState("dashboard");
   const [brand, setBrand] = useState(readBrand);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const mobileMenuButtonRef = useRef(null);
+  const firstDrawerItemRef = useRef(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -63,6 +66,16 @@ function App() {
   useEffect(() => {
     if (window.location.pathname === "/dono" && user?.role === "admin") setTab("owner");
   }, [user]);
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return undefined;
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") closeMobileMenu();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.requestAnimationFrame(() => firstDrawerItemRef.current?.focus());
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mobileMenuOpen]);
 
   const api = useMemo(
     () => ({
@@ -95,6 +108,11 @@ function App() {
     setUser(null);
   }
 
+  function closeMobileMenu() {
+    setMobileMenuOpen(false);
+    window.requestAnimationFrame(() => mobileMenuButtonRef.current?.focus());
+  }
+
   if (!sessionChecked) return <Loading />;
   if (!user) return <Login onLogin={onLogin} brand={brand} />;
 
@@ -120,8 +138,27 @@ function App() {
     window.history.pushState({}, "", id === "owner" ? "/dono" : "/");
   }
 
+  function selectMobileTab(id) {
+    selectTab(id);
+    closeMobileMenu();
+  }
+
   return (
     <div className="app">
+      <div className="mobile-topbar">
+        <div className="mobile-topbar-copy"><strong>{brand.name}</strong><span>{user.name}</span></div>
+        <button ref={mobileMenuButtonRef} className="mobile-menu-trigger" onClick={() => setMobileMenuOpen(true)} aria-label="Abrir menu" aria-expanded={mobileMenuOpen} aria-controls="mobile-navigation"><Menu size={22} /></button>
+      </div>
+      {mobileMenuOpen && <>
+        <div className="mobile-menu-overlay" aria-hidden="true" onMouseDown={closeMobileMenu} />
+        <aside id="mobile-navigation" className="mobile-drawer" role="dialog" aria-modal="true" aria-label="Menu principal">
+          <div className="mobile-drawer-header"><div><strong>{brand.name}</strong><small>{user.name}</small></div><button onClick={closeMobileMenu} aria-label="Fechar menu"><X size={22} /></button></div>
+          <nav className="mobile-drawer-nav" aria-label="Navegacao principal">
+            {tabs.map(([id, label, Icon], index) => <button key={id} ref={index === 0 ? firstDrawerItemRef : null} className={tab === id ? "active" : ""} aria-current={tab === id ? "page" : undefined} onClick={() => selectMobileTab(id)}><Icon size={19} aria-hidden="true" /><span>{label}</span></button>)}
+          </nav>
+          <button className="mobile-drawer-logout" onClick={() => { logout(); closeMobileMenu(); }}><LogOut size={19} aria-hidden="true" /> Sair</button>
+        </aside>
+      </>}
       <aside className="sidebar">
         <div className="brand">
           {brand.logoUrl ? <img className="brand-logo" src={brand.logoUrl} alt={`Logo ${brand.name}`} /> : <span className="mark">{brand.name.charAt(0).toUpperCase()}</span>}
