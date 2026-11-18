@@ -7,7 +7,7 @@ from threading import Lock
 from time import monotonic
 from xml.sax.saxutils import escape
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from openpyxl import Workbook
@@ -23,7 +23,8 @@ from sqlalchemy.orm import Session, joinedload
 from . import models, schemas
 from .auth import create_access_token, get_current_user, hash_password, has_permission, permission_codes, require_permission, require_roles, verify_password
 from .config import get_settings
-from .database import Base, engine, get_db
+from .database import Base, SessionLocal, engine, get_db
+from .geocoding import geocoder
 from .migrations import run_runtime_migrations
 from .owner_dashboard import build_customer_ranking, build_daily_summary, build_seller_performance, group_sales_by_day, money_to_cents, period_dates, require_owner, utc_query_bounds
 from .seed import seed_data
@@ -50,6 +51,32 @@ LOGIN_ATTEMPT_LIMIT = 5
 LOGIN_ATTEMPT_WINDOW_SECONDS = 15 * 60
 login_attempts: dict[str, deque[float]] = defaultdict(deque)
 login_attempts_lock = Lock()
+
+
+async def geocode_entity(table: str, entity_id: int) -> None:
+    db = SessionLocal()
+    try:
+        model = {"customer": models.Customer, "sale_delivery": models.SaleDeliveryDetail, "manifest_item": models.DeliveryManifestItem}[table]
+        row = db.get(model, entity_id)
+        if not row:
+            return
+        address = row.address if table == "customer" else row.delivery_address
+        result = await geocoder.geocode(address)
+        row.geocode_status = result.status
+        row.latitude, row.longitude = result.latitude, result.longitude
+        row.geocode_source = result.source
+        row.geocode_updated_at = datetime.utcnow()
+        db.commit()
+    finally:
+        db.close()
+
+
+def mark_geocode_pending(row) -> None:
+    row.latitude = None
+    row.longitude = None
+    row.geocode_status = "pendente"
+    row.geocode_updated_at = None
+    row.geocode_source = None
 
 
 def login_attempt_keys(request: Request, email: str) -> tuple[str, str]:
@@ -618,7 +645,7 @@ def list_customers(db: Session = Depends(get_db), user: models.User = Depends(ge
 
 
 @app.post("/api/customers", response_model=schemas.CustomerOut)
-def create_customer(payload: schemas.CustomerCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+def create_customer(payload: schemas.CustomerCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     if not has_permission(user, "customers.create"): raise HTTPException(403, "Permissao insuficiente")
     if db.query(models.Customer).filter(models.Customer.cnpj == payload.cnpj).first(): raise HTTPException(400, "CNPJ ja cadastrado")
     requested_price_table_id = payload.price_table_id if has_permission(user, "customers.change_price_table") else None
@@ -630,21 +657,25 @@ def create_customer(payload: schemas.CustomerCreate, db: Session = Depends(get_d
     row = models.Customer(**customer_data); db.add(row); db.flush()
     row.ownership = models.CustomerOwnership(seller_id=owner_seller_id)
     audit(db, user, "create", "customer", row.id, row.legal_name); db.commit(); db.refresh(row)
+    background_tasks.add_task(geocode_entity, "customer", row.id)
     return customer_to_schema(row)
 
 
 @app.put("/api/customers/{customer_id}", response_model=schemas.CustomerOut)
-def update_customer(customer_id: int, payload: schemas.CustomerUpdate, db: Session = Depends(get_db), user: models.User = Depends(require_permission("customers.edit", "customers.transfer"))):
+def update_customer(customer_id: int, payload: schemas.CustomerUpdate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: models.User = Depends(require_permission("customers.edit", "customers.transfer"))):
     row = db.get(models.Customer, customer_id)
     if not row: raise HTTPException(404, "Cliente nao encontrado")
     duplicate = db.query(models.Customer).filter(models.Customer.cnpj == payload.cnpj, models.Customer.id != customer_id).first()
     if duplicate: raise HTTPException(400, "CNPJ ja cadastrado")
     if payload.price_table_id and not db.get(models.PriceTable, payload.price_table_id): raise HTTPException(404, "Tabela de precos nao encontrada")
     if not db.get(models.Seller, payload.owner_seller_id): raise HTTPException(404, "Vendedor responsavel nao encontrado")
+    address_changed = row.address != payload.address
     for key, value in payload.model_dump(exclude={"owner_seller_id"}).items(): setattr(row, key, value)
+    if address_changed: mark_geocode_pending(row)
     if row.ownership: row.ownership.seller_id = payload.owner_seller_id
     else: row.ownership = models.CustomerOwnership(seller_id=payload.owner_seller_id)
     audit(db, user, "update", "customer", row.id, row.legal_name); db.commit(); db.refresh(row)
+    if address_changed: background_tasks.add_task(geocode_entity, "customer", row.id)
     return customer_to_schema(row)
 
 
@@ -831,7 +862,7 @@ def list_sales(
 
 
 @app.post("/api/sales", response_model=schemas.SaleOut)
-async def create_sale(payload: schemas.SaleCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+async def create_sale(payload: schemas.SaleCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     if not has_permission(user, "sales.create"): raise HTTPException(403, "Permissao insuficiente")
     seller_id = user.seller_id if has_permission(user, "sales.view_own") and not has_permission(user, "sales.view_all") else payload.seller_id
     if not seller_id:
@@ -885,6 +916,7 @@ async def create_sale(payload: schemas.SaleCreate, db: Session = Depends(get_db)
     audit(db, user, "create", "sale", sale.id, f"Venda R$ {sale.total_value:.2f}")
     db.commit()
     sale = db.query(models.Sale).options(*sale_load_options()).get(sale.id)
+    background_tasks.add_task(geocode_entity, "sale_delivery", sale.id)
     await notify_sale(db, sale)
     for product in touched_products:
         await notify_low_stock(db, product)
@@ -1084,7 +1116,7 @@ def list_delivery_manifests(db: Session = Depends(get_db), user: models.User = D
 
 
 @app.post("/api/delivery-manifests", response_model=schemas.DeliveryManifestOut)
-async def create_delivery_manifest(payload: schemas.DeliveryManifestCreate, db: Session = Depends(get_db), user: models.User = Depends(require_permission("manifests.create"))):
+async def create_delivery_manifest(payload: schemas.DeliveryManifestCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: models.User = Depends(require_permission("manifests.create"))):
     sale_ids = [item.sale_id for item in payload.items]
     if len(sale_ids) != len(set(sale_ids)):
         raise HTTPException(400, "Uma venda nao pode aparecer duas vezes no mesmo romaneio")
@@ -1123,6 +1155,8 @@ async def create_delivery_manifest(payload: schemas.DeliveryManifestCreate, db: 
     audit(db, user, "create", "delivery_manifest", manifest.id, f"{manifest.code} com {len(manifest.items)} entregas")
     db.commit()
     manifest = get_delivery_manifest(db, manifest.id)
+    for item in manifest.items:
+        background_tasks.add_task(geocode_entity, "manifest_item", item.id)
     await notify_manifest_created(db, manifest)
     return delivery_manifest_to_schema(manifest)
 
@@ -1183,6 +1217,53 @@ async def update_delivery_item(manifest_id: int, item_id: int, payload: schemas.
     if previous_status != item.status:
         await notify_delivery_status(db, manifest, item, previous_status, user.name)
     return delivery_manifest_to_schema(manifest)
+
+
+@app.get("/api/mapa/entregas")
+def map_deliveries(
+    delivery_date: date = Query(alias="date"),
+    status: str = Query("todos"),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(require_roles("admin")),
+):
+    allowed_statuses = {"todos", "pendente", "em_rota", "entregue", "nao_entregue"}
+    if status not in allowed_statuses:
+        raise HTTPException(400, "Status de entrega invalido")
+    query = db.query(models.DeliveryManifestItem).join(models.DeliveryManifest).join(models.Sale).options(joinedload(models.DeliveryManifestItem.manifest), joinedload(models.DeliveryManifestItem.sale).joinedload(models.Sale.seller)).filter(models.DeliveryManifest.delivery_date == delivery_date)
+    can_view_address = has_permission(user, "customers.view_all")
+    points, without_location = [], []
+    for item in query.order_by(models.DeliveryManifestItem.delivery_order).all():
+        item_status = "em_rota" if item.status == "pendente" and item.manifest.status == "em_rota" else item.status
+        if status != "todos" and item_status != status:
+            continue
+        payload = {
+            "id": item.id,
+            "manifest_id": item.manifest_id,
+            "customer_name": item.sale.customer_name or "Cliente",
+            "seller_name": item.sale.seller.name,
+            "status": item_status,
+            "geocode_status": item.geocode_status,
+            "address": item.delivery_address if can_view_address else None,
+        }
+        if item.latitude is None or item.longitude is None:
+            without_location.append(payload)
+        else:
+            points.append({**payload, "latitude": item.latitude, "longitude": item.longitude})
+    return {"points": points, "without_location": without_location}
+
+
+@app.post("/api/geocoding/reprocessar")
+def reprocess_geocoding(background_tasks: BackgroundTasks, db: Session = Depends(get_db), user: models.User = Depends(require_roles("admin"))):
+    rows = [
+        ("customer", row.id) for row in db.query(models.Customer).filter(models.Customer.geocode_status.in_(["pendente", "erro"])).all()
+    ] + [
+        ("sale_delivery", row.sale_id) for row in db.query(models.SaleDeliveryDetail).filter(models.SaleDeliveryDetail.geocode_status.in_(["pendente", "erro"])).all()
+    ] + [
+        ("manifest_item", row.id) for row in db.query(models.DeliveryManifestItem).filter(models.DeliveryManifestItem.geocode_status.in_(["pendente", "erro"])).all()
+    ]
+    for table, entity_id in rows:
+        background_tasks.add_task(geocode_entity, table, entity_id)
+    return {"queued": len(rows)}
 
 
 @app.get("/api/delivery-manifests/{manifest_id}/pdf")

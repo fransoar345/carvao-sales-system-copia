@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     whatsapp_token: str = ""
     manager_whatsapp: str = "+5599999999999"
     cors_origins: str = ""
+    geocoder_provider: str = "nominatim"
+    geocoder_user_agent: str = "carvao-sales-system/1.0 (contato: suporte@carvao.local)"
 
     class Config:
         env_file = ".env"

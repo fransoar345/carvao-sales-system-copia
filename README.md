@@ -61,6 +61,17 @@ ENVIRONMENT=development
 CORS_ORIGINS=http://localhost:5173
 ```
 
+## Geocodificacao de entregas
+
+O mapa usa Nominatim por padrao. Configure um identificador de aplicacao com contato valido antes de publicar. O servico envia somente o texto do endereco, limita consultas a uma por segundo e reutiliza enderecos ja consultados.
+
+```env
+GEOCODER_PROVIDER=nominatim
+GEOCODER_USER_AGENT=carvao-sales-system/1.0 (contato: suporte@empresa.com)
+```
+
+Para reprocessar enderecos pendentes ou com erro, um administrador deve chamar `POST /api/geocoding/reprocessar` pelo sistema autenticado.
+
 ## Rodar localmente
 
 Backend:

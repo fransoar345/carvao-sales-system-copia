@@ -56,6 +56,11 @@ class Customer(Base, TimestampMixin):
     email: Mapped[str | None] = mapped_column(String(160), nullable=True)
     price_table_id: Mapped[int | None] = mapped_column(ForeignKey("price_tables.id"), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geocode_status: Mapped[str] = mapped_column(String(30), default="pendente")
+    geocode_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    geocode_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     price_table = relationship("PriceTable")
     ownership = relationship("CustomerOwnership", cascade="all, delete-orphan", back_populates="customer", uselist=False)
     credit_profile = relationship("CustomerCreditProfile", cascade="all, delete-orphan", back_populates="customer", uselist=False)
@@ -221,6 +226,11 @@ class SaleDeliveryDetail(Base):
     __tablename__ = "sale_delivery_details"
     sale_id: Mapped[int] = mapped_column(ForeignKey("sales.id"), primary_key=True)
     delivery_address: Mapped[str] = mapped_column(String(300))
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geocode_status: Mapped[str] = mapped_column(String(30), default="pendente")
+    geocode_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    geocode_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     sale = relationship("Sale", back_populates="delivery_detail")
 
 
@@ -428,6 +438,11 @@ class DeliveryManifestItem(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(30), default="pendente", index=True)
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geocode_status: Mapped[str] = mapped_column(String(30), default="pendente")
+    geocode_updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    geocode_source: Mapped[str | None] = mapped_column(String(50), nullable=True)
     manifest = relationship("DeliveryManifest", back_populates="items")
     sale = relationship("Sale")
 

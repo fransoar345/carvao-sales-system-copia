@@ -11,6 +11,19 @@ def run_runtime_migrations(engine: Engine) -> None:
     if "delivery_status" not in columns:
         with engine.begin() as connection:
             connection.execute(text("ALTER TABLE sales ADD COLUMN delivery_status VARCHAR(30) NOT NULL DEFAULT 'pendente'"))
+    geocode_columns = {
+        "latitude": "DOUBLE PRECISION",
+        "longitude": "DOUBLE PRECISION",
+        "geocode_status": "VARCHAR(30) NOT NULL DEFAULT 'pendente'",
+        "geocode_updated_at": "DATETIME",
+        "geocode_source": "VARCHAR(50)",
+    }
+    for table_name in {"customers", "sale_delivery_details", "delivery_manifest_items"} & tables:
+        existing_columns = {column["name"] for column in inspector.get_columns(table_name)}
+        with engine.begin() as connection:
+            for name, definition in geocode_columns.items():
+                if name not in existing_columns:
+                    connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {name} {definition}"))
     with engine.begin() as connection:
         if {"delivery_manifest_items", "delivery_manifests"}.issubset(tables):
             connection.execute(text("""

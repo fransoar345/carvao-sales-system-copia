@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { BarChart3, Building2, Ban, Boxes, CheckCircle2, ClipboardList, Crown, Trash2, Download, LogOut, Menu, MessageCircle, MapPin, PackagePlus, Palette, Pencil, Play, Printer, ReceiptText, RotateCcw, Save, Settings2, ShieldCheck, ShoppingCart, Truck, X, Tags, UserPlus, Users, WalletCards } from "lucide-react";
+import { BarChart3, Building2, Ban, Boxes, CheckCircle2, ClipboardList, Crown, Trash2, Download, LogOut, Map, Menu, MessageCircle, MapPin, PackagePlus, Palette, Pencil, Play, Printer, ReceiptText, RotateCcw, Save, Settings2, ShieldCheck, ShoppingCart, Truck, X, Tags, UserPlus, Users, WalletCards } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { divIcon } from "leaflet";
+import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 import "./styles.css";
 
 const API = import.meta.env.VITE_API_URL || "https://carvao-sales-system-production.up.railway.app/api";
@@ -195,7 +198,7 @@ function App() {
         {tab === "prices" && <PriceTables api={api} />}
         {tab === "products" && <Products api={api} user={user} />}
         {tab === "stock" && <Stock api={api} user={user} />}
-        {tab === "deliveries" && <Deliveries api={api} />}
+        {tab === "deliveries" && <Deliveries api={api} user={user} />}
         {tab === "finance" && <Finance api={api} user={user} />}
         {tab === "access" && <><NewAccessUser api={api} /><AccessControl api={api} /></>}
         {tab === "sellers" && <Sellers api={api} user={user} />}
@@ -1240,7 +1243,7 @@ const deliveryStatus = {
   nao_entregue: "Nao entregue",
 };
 
-function Deliveries({ api }) {
+function Deliveries({ api, user }) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     delivery_date: today,
@@ -1254,6 +1257,9 @@ function Deliveries({ api }) {
   const manifestsLoad = useLoad(api, () => api.call("/delivery-manifests"), []);
   const pendingSales = pendingLoad.data || [];
   const manifests = manifestsLoad.data || [];
+  const [showMap, setShowMap] = useState(false);
+
+  if (showMap) return <DeliveryMap api={api} onBack={() => setShowMap(false)} />;
 
   function toggleSale(sale) {
     setSelected((current) => {
@@ -1350,6 +1356,7 @@ function Deliveries({ api }) {
 
   return (
     <section className="delivery-page">
+      {user.role === "admin" && <div className="delivery-map-link"><button onClick={() => setShowMap(true)}><Map size={17} /> Mapa de entregas</button></div>}
       <div className="delivery-create">
         <form className="panel form" onSubmit={createManifest}>
           <h2>Novo romaneio</h2>
@@ -1511,6 +1518,43 @@ function AccessControl({ api }) {
       <div className="panel"><h2>Perfis cadastrados</h2>{(rolesLoad.data || []).map((row) => <Row key={row.id} title={row.name} meta={`${row.permission_codes.length} permissoes · ${row.active ? "ativo" : "inativo"}`} onEdit={() => editRole(row)} />)}</div>
     </div>
     <form className="panel form" onSubmit={saveUserAccess}><h2>Perfis e permissoes individuais do usuario</h2><label className="field"><span>Usuario</span><select value={selectedUserId} onChange={(e) => selectUser(e.target.value)} required><option value="">Selecione</option>{(usersLoad.data || []).map((row) => <option key={row.id} value={row.id}>{row.name} · {row.email}</option>)}</select></label>{selectedUserId && <><div className="role-selector">{(rolesLoad.data || []).filter((item) => item.active).map((item) => <label className="check" key={item.id}><input type="checkbox" checked={userAccess.role_ids.includes(item.id)} onChange={() => setUserAccess({ ...userAccess, role_ids: userAccess.role_ids.includes(item.id) ? userAccess.role_ids.filter((id) => id !== item.id) : [...userAccess.role_ids, item.id] })} /> {item.name}</label>)}</div><label className="field"><span>Excecao individual</span><select onChange={(e) => { const [code, value] = e.target.value.split("|"); if (code) setUserAccess({ ...userAccess, overrides: { ...userAccess.overrides, [code]: value === "allow" } }); }} defaultValue=""><option value="">Adicionar permissao ou bloqueio</option>{permissions.flatMap((permission) => [<option key={`${permission.code}-allow`} value={`${permission.code}|allow`}>Permitir: {permission.name}</option>, <option key={`${permission.code}-deny`} value={`${permission.code}|deny`}>Bloquear: {permission.name}</option>])}</select></label><div className="override-list">{Object.entries(userAccess.overrides).map(([code, allowed]) => <button type="button" key={code} onClick={() => { const next = { ...userAccess.overrides }; delete next[code]; setUserAccess({ ...userAccess, overrides: next }); }}>{allowed ? "Permitido" : "Bloqueado"}: {code} ×</button>)}</div><button className="primary"><Save size={16} /> Salvar acesso do usuario</button></>}</form>
+  </section>;
+}
+
+const pinColor = (status) => status === "entregue" ? "#176b37" : status === "nao_entregue" ? "#b42318" : "#b77900";
+const deliveryPin = (status) => divIcon({ className: "delivery-pin", html: `<span style="background:${pinColor(status)}"></span>`, iconSize: [22, 22], iconAnchor: [11, 22] });
+
+function MapFocus({ point }) {
+  const map = useMap();
+  useEffect(() => { if (point) map.flyTo([point.latitude, point.longitude], 15, { duration: 0.4 }); }, [map, point]);
+  return null;
+}
+
+function DeliveryMap({ api, onBack }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [deliveryDate, setDeliveryDate] = useState(today);
+  const [status, setStatus] = useState("todos");
+  const [selected, setSelected] = useState(null);
+  const { data, error, reload } = useLoad(api, () => api.call(`/mapa/entregas?date=${deliveryDate}&status=${status}`), [deliveryDate, status]);
+  const points = data?.points || [];
+  const withoutLocation = data?.without_location || [];
+  const center = points.length ? [points[0].latitude, points[0].longitude] : [-10.18, -48.33];
+  return <section className="delivery-map-page">
+    <div className="delivery-map-toolbar">
+      <div><h2>Mapa de entregas</h2><p>{points.length} entregas no mapa, {withoutLocation.length} sem localizacao</p></div>
+      <button onClick={onBack}>Voltar para romaneios</button>
+    </div>
+    <div className="delivery-map-filters panel">
+      <label className="field"><span>Data</span><input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} /></label>
+      <label className="field"><span>Status</span><select value={status} onChange={(e) => setStatus(e.target.value)}><option value="todos">Todos</option><option value="pendente">Pendente</option><option value="em_rota">Em rota</option><option value="entregue">Entregue</option><option value="nao_entregue">Nao entregue</option></select></label>
+      <button onClick={reload}>Atualizar</button>
+    </div>
+    {error && <div className="panel map-error">Nao foi possivel carregar o mapa. Enderecos com falha de geocodificacao podem ser reprocessados pelo administrador.</div>}
+    {!data && !error && <Loading />}
+    {data && <div className="delivery-map-layout">
+      <div className="delivery-map-frame"><MapContainer center={center} zoom={points.length ? 12 : 5} scrollWheelZoom><TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" /><MapFocus point={selected} />{points.map((point) => <Marker key={point.id} position={[point.latitude, point.longitude]} icon={deliveryPin(point.status)} eventHandlers={{ click: () => setSelected(point) }}><Popup><strong>{point.customer_name}</strong><br />{point.address || "Endereco restrito"}<br />{point.seller_name}<br />{deliveryStatus[point.status] || point.status}</Popup></Marker>)}</MapContainer></div>
+      <aside className="panel delivery-map-list"><h2>Entregas</h2>{points.map((point) => <button key={point.id} className="map-list-item" onClick={() => setSelected(point)}><span className="map-status-dot" style={{ background: pinColor(point.status) }} /><span><strong>{point.customer_name}</strong><small>{point.address || "Endereco restrito"} · {deliveryStatus[point.status] || point.status}</small></span></button>)}{!points.length && <p className="empty-hint">Nenhuma entrega localizada neste dia.</p>}<h2>Sem localizacao</h2>{withoutLocation.map((point) => <div key={point.id} className="map-list-item static"><span><strong>{point.customer_name}</strong><small>{point.address || "Endereco restrito"} · {point.geocode_status === "erro" ? "Falha ao localizar" : "Pendente de localizacao"}</small></span></div>)}{!withoutLocation.length && <p className="empty-hint">Nenhuma entrega pendente.</p>}</aside>
+    </div>}
   </section>;
 }
 
